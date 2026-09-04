@@ -17,22 +17,24 @@ import { OSRMPlus } from "osrmplus";
 
 const client = new OSRMPlus("your_api_key");
 
-// Route
+// Route (coordinates are [lng, lat])
 const route = await client.route([[74.3436, 31.5497], [74.265, 31.47]]);
 
-// Distance matrix
+// Distance matrix (coordinates are [lng, lat])
 const matrix = await client.matrix({
   coordinates: [[74.34, 31.55], [74.27, 31.47], [74.3, 31.5]],
 });
 
-// Fleet optimization (VRP)
-const plan = await client.optimize({
-  vehicles: [{ id: 1, start: [74.3436, 31.5497], capacity: [20] }],
-  jobs: [
-    { id: 1, location: [74.265, 31.47], delivery: [5] },
-    { id: 2, location: [74.3, 31.5], delivery: [8] },
-  ],
+// Fleet optimization (coordinates are [lat, lon])
+const result = await client.vrp({
+  coordinates: [[31.5497, 74.3436], [31.47, 74.265], [31.5, 74.3]],
+  num_vehicles: 2,
+  depot: 0,
+  demands: [0, 3, 2],
+  vehicle_capacities: [6, 6],
+  time_limit_seconds: 10,
 });
+console.log(result.status); // "ROUTING_SUCCESS"
 ```
 
 Full docs at [osrmplus.com/docs](https://osrmplus.com/docs).

@@ -8,7 +8,9 @@ and is fully compatible with OSRM clients.
 
 Base URL: https://api.osrmplus.com
 Authentication: x-api-key header or Authorization: Bearer header
-Coordinates: lng,lat (GET endpoints) or [lng, lat] arrays (POST endpoints)
+
+IMPORTANT: OSRM GET endpoints use lng,lat coordinates. Optimization POST
+endpoints use [lat, lon] in the JSON body. These two conventions are different.
 
 ## Install
 
@@ -20,14 +22,21 @@ JavaScript: npm install osrmplus
 ```python
 from osrmplus import Client
 client = Client("your_api_key")
+
+# Route (coordinates are (lng, lat) tuples)
 route = client.route([(74.3436, 31.5497), (74.2650, 31.4700)])
+
+# Matrix (coordinates are (lng, lat) tuples)
 matrix = client.matrix(coordinates=[(74.34, 31.55), (74.27, 31.47), (74.30, 31.50)])
-plan = client.optimize(
-    vehicles=[{"id": 1, "start": [74.3436, 31.5497], "capacity": [20]}],
-    jobs=[
-        {"id": 1, "location": [74.2650, 31.4700], "delivery": [5]},
-        {"id": 2, "location": [74.3000, 31.5000], "delivery": [8]},
-    ],
+
+# VRP (coordinates are [lat, lon])
+result = client.vrp(
+    coordinates=[[31.5497, 74.3436], [31.4700, 74.2650], [31.5000, 74.3000]],
+    num_vehicles=2,
+    depot=0,
+    demands=[0, 3, 2],
+    vehicle_capacities=[6, 6],
+    time_limit_seconds=10,
 )
 ```
 
@@ -36,26 +45,39 @@ plan = client.optimize(
 ```javascript
 import { OSRMPlus } from "osrmplus";
 const client = new OSRMPlus("your_api_key");
+
+// Route (coordinates are [lng, lat])
 const route = await client.route([[74.3436, 31.5497], [74.265, 31.47]]);
+
+// Matrix (coordinates are [lng, lat])
 const matrix = await client.matrix({ coordinates: [[74.34, 31.55], [74.27, 31.47]] });
-const plan = await client.optimize({
-    vehicles: [{ id: 1, start: [74.3436, 31.5497], capacity: [20] }],
-    jobs: [{ id: 1, location: [74.265, 31.47], delivery: [5] }],
+
+// VRP (coordinates are [lat, lon])
+const result = await client.vrp({
+    coordinates: [[31.5497, 74.3436], [31.47, 74.265], [31.5, 74.3]],
+    num_vehicles: 2,
+    depot: 0,
+    demands: [0, 3, 2],
+    vehicle_capacities: [6, 6],
+    time_limit_seconds: 10,
 });
 ```
 
 ## curl example
 
 ```bash
+# Route (lng,lat in the URL)
 curl "https://api.osrmplus.com/route/v1/driving/74.3436,31.5497;74.2650,31.4700" \
   -H "x-api-key: YOUR_KEY"
 
+# Matrix (lng,lat in the URL)
 curl "https://api.osrmplus.com/table/v1/driving/74.34,31.55;74.27,31.47;74.30,31.50" \
   -H "x-api-key: YOUR_KEY"
 
+# VRP ([lat, lon] in the JSON body)
 curl -X POST "https://api.osrmplus.com/vrp" \
   -H "x-api-key: YOUR_KEY" -H "Content-Type: application/json" \
-  -d '{"vehicles":[{"id":1,"start":[74.34,31.55],"capacity":[20]}],"jobs":[{"id":1,"location":[74.27,31.47],"delivery":[5]}]}'
+  -d '{"coordinates":[[31.55,74.34],[31.47,74.27],[31.50,74.30]],"num_vehicles":2,"depot":0,"demands":[0,3,2],"vehicle_capacities":[6,6],"time_limit_seconds":10}'
 ```
 
 ## Endpoints
@@ -64,8 +86,9 @@ GET /route/v1/driving/{lng,lat;lng,lat} - point-to-point route
 GET /table/v1/driving/{coords} - distance and duration matrix
 GET /nearest/v1/driving/{lng,lat} - snap coordinate to nearest road
 GET /match/v1/driving/{coords} - match GPS traces to roads
+GET /trip/v1/driving/{coords} - fastest round trip
 POST /vrp - multi-vehicle fleet optimization
-POST /tsp - shortest round trip
+POST /tsp - shortest tour (single vehicle)
 POST /optimize - VRP with sensible defaults
 
 ## Route response shape
@@ -78,11 +101,15 @@ POST /optimize - VRP with sensible defaults
 
 ## VRP request shape
 
-{ "vehicles": [{ "id": 1, "start": [lng, lat], "capacity": [20] }], "jobs": [{ "id": 1, "location": [lng, lat], "delivery": [5], "time_windows": [[start, end]], "service": 300 }] }
+{ "coordinates": [[lat,lon], ...], "num_vehicles": 2, "depot": 0, "demands": [0, 3, 2], "vehicle_capacities": [6, 6], "time_limit_seconds": 10 }
+
+Key VRP fields: coordinates, distance_matrix, num_vehicles, depot, vehicle_starts, vehicle_ends, demands, vehicle_capacities, vehicle_max_distances, vehicle_max_times, time_windows, service_times, time_limit_seconds, objective (minimize_total_distance|minimize_longest_route|minimize_total_time|minimize_vehicles_used), strategy, allow_dropping_visits, drop_penalty, detailed_solution, use_guided_local_search, use_tabu_search, use_simulated_annealing.
 
 ## VRP response shape
 
-{ "code": "Ok", "routes": [{ "vehicle": 1, "steps": [{ "type": "start" }, { "type": "job", "id": 1 }, { "type": "end" }] }], "unassigned": [] }
+{ "job_id": "abc", "status": "ROUTING_SUCCESS", "routes": [{ "vehicle_id": 0, "route": [0, 2, 1, 0], "distance": 4210, "load": 5 }], "total_distance": 8300, "dropped_nodes": [], "statistics": { "vehicles_used": 2, "num_locations": 4, "solve_time_ms": 1820 } }
+
+Always check the status field. An infeasible problem returns 200 with status "NO_SOLUTION_FOUND".
 
 ## Error codes
 
@@ -91,13 +118,6 @@ POST /optimize - VRP with sensible defaults
 403 region_not_licensed - coordinates outside your regions
 402 quota_exceeded - monthly limit reached
 429 rate_limit_exceeded - too many requests per second
-
-## Pricing
-
-Free: 50K matrix elements/mo, 1K routing calls/mo, 1 region, $0
-Growth: 500K elements/mo, 10K calls/mo, 2 regions, $79/mo
-Scale: 5M elements/mo, 100K calls/mo, all regions, $299/mo
-Enterprise: unlimited, custom pricing
 
 Sign up at https://osrmplus.com (free, no credit card)
 Docs at https://osrmplus.com/docs

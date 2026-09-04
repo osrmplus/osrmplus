@@ -20,8 +20,17 @@ const DEFAULT_BASE_URL = "https://api.osrmplus.com";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-/** A coordinate pair: [longitude, latitude]. */
+/**
+ * OSRM coordinate pair: [longitude, latitude].
+ * Used for GET endpoints (/route, /table, /nearest, /match, /trip).
+ */
 export type Coordinate = [number, number];
+
+/**
+ * Optimization coordinate pair: [latitude, longitude].
+ * Used for POST endpoints (/vrp, /tsp, /optimize).
+ */
+export type LatLon = [number, number];
 
 export interface RouteResponse {
   code: string;
@@ -63,41 +72,27 @@ export interface TripResponse {
   waypoints: Array<Record<string, unknown>>;
 }
 
-export interface Vehicle {
-  id: number | string;
-  start?: Coordinate;
-  end?: Coordinate;
-  capacity?: number[];
-  time_window?: [number, number];
-  [key: string]: unknown;
-}
-
-export interface Job {
-  id: number | string;
-  location: Coordinate;
-  delivery?: number[];
-  pickup?: number[];
-  service?: number;
-  priority?: number;
-  time_windows?: Array<[number, number]>;
+export interface VRPRoute {
+  vehicle_id: number;
+  route: number[];
+  distance: number;
+  load?: number;
   [key: string]: unknown;
 }
 
 export interface OptimizationResponse {
-  code: string;
-  routes: Array<{
-    vehicle: number | string;
-    cost: number;
-    steps: Array<{
-      type: string;
-      id?: number | string;
-      location?: Coordinate;
-      arrival?: number;
-      [key: string]: unknown;
-    }>;
-    [key: string]: unknown;
-  }>;
-  unassigned: Array<{ id: number | string; [key: string]: unknown }>;
+  job_id: string;
+  status: string;
+  routes: VRPRoute[];
+  total_distance: number;
+  max_route_distance: number;
+  dropped_nodes: number[];
+  statistics: {
+    vehicles_used: number;
+    num_locations: number;
+    solve_time_ms: number;
+  };
+  meta?: Record<string, unknown>;
 }
 
 export interface MatrixParams {
@@ -108,14 +103,47 @@ export interface MatrixParams {
   [key: string]: unknown;
 }
 
-export interface OptimizeParams {
-  vehicles: Vehicle[];
-  jobs: Job[];
+export interface VRPParams {
+  coordinates: LatLon[];
+  num_vehicles?: number;
+  depot?: number;
+  demands?: number[];
+  vehicle_capacities?: number[];
+  vehicle_starts?: number[];
+  vehicle_ends?: number[];
+  vehicle_max_distances?: number[];
+  vehicle_max_times?: number[];
+  time_windows?: [number, number][];
+  service_times?: number[];
+  time_limit_seconds?: number;
+  objective?: string;
+  strategy?: string;
+  allow_dropping_visits?: boolean;
+  drop_penalty?: number;
+  mandatory_nodes?: number[];
+  optional_nodes?: number[];
+  detailed_solution?: boolean;
+  use_guided_local_search?: boolean;
+  use_tabu_search?: boolean;
+  use_simulated_annealing?: boolean;
+  optimize_for?: string;
+  distance_matrix?: number[][];
   [key: string]: unknown;
 }
 
 export interface TSPParams {
-  coordinates: Coordinate[];
+  coordinates: LatLon[];
+  depot?: number;
+  time_limit_seconds?: number;
+  detailed_solution?: boolean;
+  distance_matrix?: number[][];
+  [key: string]: unknown;
+}
+
+export interface OptimizeParams {
+  coordinates: LatLon[];
+  time_limit_seconds?: number;
+  detailed_solution?: boolean;
   [key: string]: unknown;
 }
 
@@ -220,7 +248,7 @@ export class OSRMPlus {
     }
   }
 
-  // ── Routing ────────────────────────────────────────────────────
+  // ── Routing (coordinates are [lng, lat]) ───────────────────────
 
   /**
    * Get a route between two or more points.
@@ -278,7 +306,7 @@ export class OSRMPlus {
     return this.get(`/trip/v1/driving/${coordStr(coordinates)}`, params);
   }
 
-  // ── Matrix ─────────────────────────────────────────────────────
+  // ── Matrix (coordinates are [lng, lat]) ────────────────────────
 
   /**
    * Compute a distance/duration matrix.
@@ -303,27 +331,35 @@ export class OSRMPlus {
     return this.get(`/table/v1/driving/${coordStr(coordinates)}`, qp);
   }
 
-  // ── Optimization ───────────────────────────────────────────────
+  // ── Optimization (coordinates are [lat, lon]) ──────────────────
 
   /**
    * Solve a vehicle routing problem.
    *
-   * @param params - Vehicles, jobs, and optional constraints.
+   * Coordinates are [lat, lon] arrays. Index 0 is the depot unless you
+   * set depot to something else. Every per-node array (demands,
+   * time_windows, service_times) follows the same order as coordinates.
    *
    * @example
    * ```typescript
    * const result = await client.vrp({
-   *   vehicles: [{ id: 1, start: [74.34, 31.55], capacity: [20] }],
-   *   jobs: [{ id: 1, location: [74.27, 31.47], delivery: [5] }],
+   *   coordinates: [[24.71, 46.67], [24.72, 46.68], [24.73, 46.69]],
+   *   num_vehicles: 2,
+   *   depot: 0,
+   *   demands: [0, 3, 2],
+   *   vehicle_capacities: [6, 6],
    * });
+   * console.log(result.status); // "ROUTING_SUCCESS"
    * ```
    */
-  async vrp(params: OptimizeParams): Promise<OptimizationResponse> {
+  async vrp(params: VRPParams): Promise<OptimizationResponse> {
     return this.post("/vrp", params);
   }
 
   /**
-   * Find the shortest round trip through a set of stops.
+   * Find the shortest round trip through a set of stops (single vehicle).
+   *
+   * Coordinates are [lat, lon] arrays.
    */
   async tsp(params: TSPParams): Promise<OptimizationResponse> {
     return this.post("/tsp", params);
@@ -331,7 +367,9 @@ export class OSRMPlus {
 
   /**
    * Optimize a delivery round with sensible defaults.
-   * Like vrp() but picks reasonable parameters automatically.
+   * Like vrp() but picks fleet size and search parameters automatically.
+   *
+   * Coordinates are [lat, lon] arrays.
    */
   async optimize(params: OptimizeParams): Promise<OptimizationResponse> {
     return this.post("/optimize", params);

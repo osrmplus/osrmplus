@@ -1,19 +1,22 @@
 #!/bin/bash
-# Optimize deliveries for 2 vehicles and 5 stops
+# VRP: optimize deliveries for 2 vehicles and 5 stops.
+# Coordinates are [lat, lon]. Index 0 is the depot.
 
-curl -s -X POST "https://api.osrmplus.com/optimize" \
+curl -s -X POST "https://api.osrmplus.com/vrp" \
   -H "x-api-key: $OSRMPLUS_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "vehicles": [
-      {"id": 1, "start": [74.3436, 31.5497], "end": [74.3436, 31.5497], "capacity": [20]},
-      {"id": 2, "start": [74.3436, 31.5497], "end": [74.3436, 31.5497], "capacity": [20]}
+    "coordinates": [
+      [31.5497, 74.3436],
+      [31.4700, 74.2650],
+      [31.5000, 74.3000],
+      [31.5200, 74.2800],
+      [31.5100, 74.3200],
+      [31.4800, 74.2900]
     ],
-    "jobs": [
-      {"id": 1, "location": [74.2650, 31.4700], "delivery": [5], "service": 300},
-      {"id": 2, "location": [74.3000, 31.5000], "delivery": [8], "service": 300},
-      {"id": 3, "location": [74.2800, 31.5200], "delivery": [3], "service": 300},
-      {"id": 4, "location": [74.3200, 31.5100], "delivery": [6], "service": 300},
-      {"id": 5, "location": [74.2900, 31.4800], "delivery": [4], "service": 300}
-    ]
+    "num_vehicles": 2,
+    "depot": 0,
+    "demands": [0, 3, 2, 4, 6, 4],
+    "vehicle_capacities": [10, 10],
+    "time_limit_seconds": 10
   }'

@@ -26,7 +26,7 @@ class APIError(Exception):
 
 
 def _coord_str(coordinates: Sequence[tuple[float, float]]) -> str:
-    """Format [(lng, lat), ...] as 'lng,lat;lng,lat'."""
+    """Format [(lng, lat), ...] as 'lng,lat;lng,lat' for OSRM GET endpoints."""
     return ";".join(f"{lng},{lat}" for lng, lat in coordinates)
 
 
@@ -100,7 +100,7 @@ class Client:
                     message=str(e.reason),
                 ) from e
 
-    # ── Routing ──────────────────────────────────────────────────────
+    # ── Routing (coordinates are (lng, lat) tuples) ──────────────
 
     def route(
         self,
@@ -181,7 +181,7 @@ class Client:
         path = f"/trip/v1/driving/{_coord_str(coordinates)}"
         return self._get(path, params if params else None)
 
-    # ── Matrix ───────────────────────────────────────────────────────
+    # ── Matrix (coordinates are (lng, lat) tuples) ───────────────
 
     def matrix(
         self,
@@ -213,54 +213,132 @@ class Client:
             p["annotations"] = annotations
         return self._get(path, p if p else None)
 
-    # ── Optimization ─────────────────────────────────────────────────
+    # ── Optimization (coordinates are [lat, lon]) ────────────────
 
     def vrp(
         self,
-        vehicles: list[dict[str, Any]],
-        jobs: list[dict[str, Any]],
+        coordinates: Sequence[Sequence[float]],
+        *,
+        num_vehicles: int = 1,
+        depot: int = 0,
+        demands: Sequence[int] | None = None,
+        vehicle_capacities: Sequence[int] | None = None,
+        time_windows: Sequence[Sequence[int]] | None = None,
+        service_times: Sequence[int] | None = None,
+        time_limit_seconds: int | None = None,
+        objective: str | None = None,
+        allow_dropping_visits: bool | None = None,
+        drop_penalty: int | None = None,
+        detailed_solution: bool | None = None,
         **params: Any,
     ) -> dict[str, Any]:
         """Solve a vehicle routing problem.
 
+        Coordinates are [lat, lon] arrays. Index 0 is the depot unless you
+        set ``depot`` to something else. Every per-node array (demands,
+        time_windows, service_times) follows the same order as coordinates.
+
         Args:
-            vehicles: List of vehicle objects with at least ``id`` and ``start``.
-            jobs: List of job objects with at least ``id`` and ``location``.
+            coordinates: List of [lat, lon] arrays.
+            num_vehicles: Fleet size.
+            depot: Index of the depot node (default 0).
+            demands: Load demand at each stop. Requires vehicle_capacities.
+            vehicle_capacities: Maximum capacity for each vehicle.
+            time_windows: [[earliest, latest]] for each stop.
+            service_times: Seconds spent at each stop.
+            time_limit_seconds: How long the solver may search (default 30).
+            objective: 'minimize_total_distance', 'minimize_longest_route',
+                       'minimize_total_time', or 'minimize_vehicles_used'.
+            allow_dropping_visits: Let the solver skip stops.
+            drop_penalty: Cost of skipping a stop.
+            detailed_solution: Include coordinates and arrival times.
 
         Returns:
-            Parsed JSON with ``routes`` and ``unassigned`` arrays.
+            Parsed JSON with ``status``, ``routes``, ``total_distance``,
+            ``dropped_nodes``, and ``statistics``.
         """
-        return self._post("/vrp", {"vehicles": vehicles, "jobs": jobs, **params})
+        body: dict[str, Any] = {
+            "coordinates": [list(c) for c in coordinates],
+            "num_vehicles": num_vehicles,
+            "depot": depot,
+            **params,
+        }
+        if demands is not None:
+            body["demands"] = list(demands)
+        if vehicle_capacities is not None:
+            body["vehicle_capacities"] = list(vehicle_capacities)
+        if time_windows is not None:
+            body["time_windows"] = [list(tw) for tw in time_windows]
+        if service_times is not None:
+            body["service_times"] = list(service_times)
+        if time_limit_seconds is not None:
+            body["time_limit_seconds"] = time_limit_seconds
+        if objective is not None:
+            body["objective"] = objective
+        if allow_dropping_visits is not None:
+            body["allow_dropping_visits"] = allow_dropping_visits
+        if drop_penalty is not None:
+            body["drop_penalty"] = drop_penalty
+        if detailed_solution is not None:
+            body["detailed_solution"] = detailed_solution
+        return self._post("/vrp", body)
 
     def tsp(
         self,
-        coordinates: Sequence[tuple[float, float]],
+        coordinates: Sequence[Sequence[float]],
+        *,
+        depot: int = 0,
+        time_limit_seconds: int | None = None,
+        detailed_solution: bool | None = None,
         **params: Any,
     ) -> dict[str, Any]:
         """Find the shortest round trip through a set of stops.
 
+        Coordinates are [lat, lon] arrays.
+
         Args:
-            coordinates: List of (lng, lat) tuples.
+            coordinates: List of [lat, lon] arrays.
+            depot: Start and end node (default 0).
+            time_limit_seconds: How long the solver may search.
+            detailed_solution: Include coordinates in the response.
         """
-        return self._post(
-            "/tsp",
-            {"coordinates": [[lng, lat] for lng, lat in coordinates], **params},
-        )
+        body: dict[str, Any] = {
+            "coordinates": [list(c) for c in coordinates],
+            "depot": depot,
+            **params,
+        }
+        if time_limit_seconds is not None:
+            body["time_limit_seconds"] = time_limit_seconds
+        if detailed_solution is not None:
+            body["detailed_solution"] = detailed_solution
+        return self._post("/tsp", body)
 
     def optimize(
         self,
-        vehicles: list[dict[str, Any]],
-        jobs: list[dict[str, Any]],
+        coordinates: Sequence[Sequence[float]],
+        *,
+        time_limit_seconds: int | None = None,
+        detailed_solution: bool | None = None,
         **params: Any,
     ) -> dict[str, Any]:
         """Optimize a delivery round with sensible defaults.
 
-        Like :meth:`vrp` but picks reasonable parameters automatically.
+        Like :meth:`vrp` but picks fleet size and search parameters
+        automatically.
+
+        Coordinates are [lat, lon] arrays.
 
         Args:
-            vehicles: List of vehicle objects.
-            jobs: List of job objects.
+            coordinates: List of [lat, lon] arrays.
+            time_limit_seconds: How long the solver may search.
+            detailed_solution: Include coordinates in the response.
         """
-        return self._post(
-            "/optimize", {"vehicles": vehicles, "jobs": jobs, **params}
-        )
+        body: dict[str, Any] = {
+            "coordinates": [list(c) for c in coordinates],
+            **params,
+        }
+        if time_limit_seconds is not None:
+            body["time_limit_seconds"] = time_limit_seconds
+        if detailed_solution is not None:
+            body["detailed_solution"] = detailed_solution
+        return self._post("/optimize", body)
