@@ -1,0 +1,104 @@
+# OSRMPlus
+
+> Routing, distance matrices, and fleet optimization API.
+
+OSRMPlus is a cloud API for road network routing. You send coordinates, you get
+back routes, distance matrices, and optimized vehicle plans. It is built on OSRM
+and is fully compatible with OSRM clients.
+
+Base URL: https://api.osrmplus.com
+Authentication: x-api-key header or Authorization: Bearer header
+Coordinates: lng,lat (GET endpoints) or [lng, lat] arrays (POST endpoints)
+
+## Install
+
+Python: pip install osrmplus
+JavaScript: npm install osrmplus
+
+## Python example
+
+```python
+from osrmplus import Client
+client = Client("your_api_key")
+route = client.route([(74.3436, 31.5497), (74.2650, 31.4700)])
+matrix = client.matrix(coordinates=[(74.34, 31.55), (74.27, 31.47), (74.30, 31.50)])
+plan = client.optimize(
+    vehicles=[{"id": 1, "start": [74.3436, 31.5497], "capacity": [20]}],
+    jobs=[
+        {"id": 1, "location": [74.2650, 31.4700], "delivery": [5]},
+        {"id": 2, "location": [74.3000, 31.5000], "delivery": [8]},
+    ],
+)
+```
+
+## JavaScript example
+
+```javascript
+import { OSRMPlus } from "osrmplus";
+const client = new OSRMPlus("your_api_key");
+const route = await client.route([[74.3436, 31.5497], [74.265, 31.47]]);
+const matrix = await client.matrix({ coordinates: [[74.34, 31.55], [74.27, 31.47]] });
+const plan = await client.optimize({
+    vehicles: [{ id: 1, start: [74.3436, 31.5497], capacity: [20] }],
+    jobs: [{ id: 1, location: [74.265, 31.47], delivery: [5] }],
+});
+```
+
+## curl example
+
+```bash
+curl "https://api.osrmplus.com/route/v1/driving/74.3436,31.5497;74.2650,31.4700" \
+  -H "x-api-key: YOUR_KEY"
+
+curl "https://api.osrmplus.com/table/v1/driving/74.34,31.55;74.27,31.47;74.30,31.50" \
+  -H "x-api-key: YOUR_KEY"
+
+curl -X POST "https://api.osrmplus.com/vrp" \
+  -H "x-api-key: YOUR_KEY" -H "Content-Type: application/json" \
+  -d '{"vehicles":[{"id":1,"start":[74.34,31.55],"capacity":[20]}],"jobs":[{"id":1,"location":[74.27,31.47],"delivery":[5]}]}'
+```
+
+## Endpoints
+
+GET /route/v1/driving/{lng,lat;lng,lat} - point-to-point route
+GET /table/v1/driving/{coords} - distance and duration matrix
+GET /nearest/v1/driving/{lng,lat} - snap coordinate to nearest road
+GET /match/v1/driving/{coords} - match GPS traces to roads
+POST /vrp - multi-vehicle fleet optimization
+POST /tsp - shortest round trip
+POST /optimize - VRP with sensible defaults
+
+## Route response shape
+
+{ "code": "Ok", "routes": [{ "distance": 12453.2, "duration": 847.3, "geometry": "...", "legs": [...] }] }
+
+## Matrix response shape
+
+{ "code": "Ok", "durations": [[0, 234.5], [234.5, 0]], "distances": [[0, 3200], [3200, 0]] }
+
+## VRP request shape
+
+{ "vehicles": [{ "id": 1, "start": [lng, lat], "capacity": [20] }], "jobs": [{ "id": 1, "location": [lng, lat], "delivery": [5], "time_windows": [[start, end]], "service": 300 }] }
+
+## VRP response shape
+
+{ "code": "Ok", "routes": [{ "vehicle": 1, "steps": [{ "type": "start" }, { "type": "job", "id": 1 }, { "type": "end" }] }], "unassigned": [] }
+
+## Error codes
+
+401 api_key_required - no key sent
+401 api_key_invalid - key not recognized
+403 region_not_licensed - coordinates outside your regions
+402 quota_exceeded - monthly limit reached
+429 rate_limit_exceeded - too many requests per second
+
+## Pricing
+
+Free: 50K matrix elements/mo, 1K routing calls/mo, 1 region, $0
+Growth: 500K elements/mo, 10K calls/mo, 2 regions, $79/mo
+Scale: 5M elements/mo, 100K calls/mo, all regions, $299/mo
+Enterprise: unlimited, custom pricing
+
+Sign up at https://osrmplus.com (free, no credit card)
+Docs at https://osrmplus.com/docs
+Playground at https://osrmplus.com/playground

@@ -1,0 +1,44 @@
+{
+  "name": "osrmplus",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript client for the OSRMPlus routing, matrix, and fleet optimization API.",
+  "license": "MIT",
+  "author": "Logistr LLC <support@osrmplus.com>",
+  "homepage": "https://osrmplus.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/osrmplus/osrmplus",
+    "directory": "js"
+  },
+  "bugs": "https://github.com/osrmplus/osrmplus/issues",
+  "keywords": [
+    "routing",
+    "distance-matrix",
+    "osrm",
+    "logistics",
+    "vrp",
+    "tsp",
+    "fleet-optimization",
+    "directions",
+    "maps"
+  ],
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc && tsc --module commonjs --outDir dist/cjs && node scripts/rename-cjs.js",
+    "prepublishOnly": "npm run build"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

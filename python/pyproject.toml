@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "osrmplus"
+version = "0.1.0"
+description = "Python client for the OSRMPlus routing, matrix, and fleet optimization API."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.9"
+authors = [{ name = "Logistr LLC", email = "support@osrmplus.com" }]
+keywords = [
+    "routing",
+    "distance-matrix",
+    "osrm",
+    "logistics",
+    "vrp",
+    "tsp",
+    "fleet-optimization",
+    "directions",
+    "maps",
+    "geocoding",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: GIS",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://osrmplus.com"
+Documentation = "https://osrmplus.com/docs"
+Repository = "https://github.com/osrmplus/osrmplus"
+Issues = "https://github.com/osrmplus/osrmplus/issues"
